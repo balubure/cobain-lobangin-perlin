@@ -19,11 +19,70 @@ controls.dampingFactor = 0.1; // Faktor peredaman
 const size = 100;
 const segments = 100;
 const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
+
+/*
 const material = new THREE.MeshStandardMaterial({
   color: 0x88cc88,
   wireframe: false, // Nonaktifkan wireframe
   side: THREE.DoubleSide,
 });
+*/
+
+// Shader Material untuk memberikan warna berbeda berdasarkan normal
+const vertexShader = `
+varying vec3 vNormal;
+varying vec3 vPosition;
+
+void main() {
+    vNormal = normalize(normalMatrix * normal); // Normal untuk fragment shader
+    vPosition = position; // Kirim posisi ke fragment shader
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+
+
+`;
+
+const fragmentShader = `
+varying vec3 vPosition;
+
+void main() {
+    // Warna pada berbagai ketinggian
+    vec3 lowColor = vec3(0.0, 0.3, 0.0); // Hijau tua
+    vec3 midLowColor = vec3(0.5, 0.8, 0.2); // Hijau muda
+    vec3 midColor = vec3(1.0, 1.0, 0.0); // Kuning
+    vec3 midHighColor = vec3(0.5, 0.8, 1.0); // Biru muda
+    vec3 highColor = vec3(0.0, 0.0, 0.5); // Biru tua
+
+    // Normalisasi posisi Y (misalnya dari -50 ke 50 menjadi 0 ke 1)
+    float heightFactor = clamp((vPosition.z - (-3.0)) / 5.0, 0.0, 1.0);
+
+    // Interpolasi warna berdasarkan ketinggian
+    vec3 finalColor;
+    if (heightFactor < 0.25) {
+        finalColor = mix(lowColor, midLowColor, heightFactor / 0.25); // Hijau tua → Hijau muda
+    } else if (heightFactor < 0.5) {
+        finalColor = mix(midLowColor, midColor, (heightFactor - 0.25) / 0.25); // Hijau muda → Kuning
+    } else if (heightFactor < 0.75) {
+        finalColor = mix(midColor, midHighColor, (heightFactor - 0.5) / 0.25); // Kuning → Biru muda
+    } else {
+        finalColor = mix(midHighColor, highColor, (heightFactor - 0.75) / 0.25); // Biru muda → Biru tua
+    }
+
+    gl_FragColor = vec4(finalColor, 1.0);
+}
+
+
+
+`;
+
+// Gunakan ShaderMaterial
+const material = new THREE.ShaderMaterial({
+  vertexShader,
+  fragmentShader,
+  side: THREE.DoubleSide, // Render kedua sisi
+});
+
+
 const plane = new THREE.Mesh(geometry, material);
 plane.rotation.x = -Math.PI / 2; // Rotate to lay flat
 scene.add(plane);
@@ -48,6 +107,28 @@ geometry.attributes.position.needsUpdate = true;
 const light = new THREE.DirectionalLight(0xffffff, 1);
 light.position.set(10, 20, 10);
 scene.add(light);
+
+// Tambahkan DirectionalLight dari sisi kanan
+const rightLight = new THREE.DirectionalLight(0xffffff, 0.8); // Cahaya putih dengan intensitas 0.8
+rightLight.position.set(-20, 10, 0); // Posisi di kanan atas
+rightLight.castShadow = true; // Aktifkan bayangan
+scene.add(rightLight);
+
+// Aktifkan shadow map pada renderer
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Bayangan lembut
+
+// Tambahkan shadow pada mesh
+plane.receiveShadow = true;
+
+
+
+// Tambahkan juga cahaya utama dari atas jika belum ada
+const mainLight = new THREE.DirectionalLight(0xffffff, 1);
+mainLight.position.set(0, 20, 10);
+mainLight.castShadow = true;
+scene.add(mainLight);
+
 
 // Add Camera
 camera.position.set(0, 20, 50);
